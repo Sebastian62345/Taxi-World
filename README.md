@@ -1,4 +1,4 @@
-# Taxi Świat - Aplikacja do Zamawiania Taksówek
+# Taxi Świat - Aplikacja do Zamawiania Taksówek             Autor: Sebastian Woźniak 159851
 
 Aplikacja webowa do zamawiania taksówek w stylu Uber, stworzona bez użycia backendu. Umożliwia użytkownikom przeglądanie dostępnych taksówek, sprawdzanie opinii klientów oraz zamawianie przejazdów.
 

@@ -37,7 +37,6 @@ TaxiWorld/
 ├── model.js           # Model danych (taksówki, zamówienia, użytkownicy)
 ├── view.js            # Widok (renderowanie interfejsu użytkownika)
 ├── controller.js      # Kontroler (obsługa zdarzeń i logika biznesowa)
-├── map.js             # Moduł mapy z lokalizacjami taksówek
 ├── reviews.js         # Moduł obsługi opinii klientów
 └── README.md          # Ten plik
 ```

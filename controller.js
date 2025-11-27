@@ -1,11 +1,12 @@
+
 // Controller: Handles user interactions and updates model/view
 const TaxiController = {
     currentTaxis: [],
     selectedRideType: null,
 
     init() {
-        this.currentTaxis = TaxiModel.getTaxis();
-        TaxiView.renderRideTypes(TaxiModel.getRideTypes());
+        this.currentTaxis = Model.getTaxis();
+        TaxiView.renderRideTypes(Model.getRideTypes());
         TaxiView.renderTaxis(this.currentTaxis);
         this.bindEvents();
     },
@@ -15,6 +16,7 @@ const TaxiController = {
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('book-btn')) {
                 const taxiId = parseInt(e.target.getAttribute('data-taxi-id'));
+                console.log('Book button clicked for taxi ID:', taxiId);
                 this.confirmRide(taxiId);
             }
         });
@@ -37,9 +39,11 @@ const TaxiController = {
             this.showNotifications();
         });
 
-        document.getElementById('discounts-btn').addEventListener('click', () => {
-            this.showDiscounts();
+        document.getElementById('reviews-btn').addEventListener('click', () => {
+            this.showReviews();
         });
+
+
 
         // Login form
         document.getElementById('login-submit').addEventListener('click', () => {
@@ -57,27 +61,50 @@ const TaxiController = {
         document.getElementById('submit-rating').addEventListener('click', () => {
             this.submitRating();
         });
+
+        // Driver ride acceptance/decline
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'accept-ride') {
+                this.driverAcceptRide();
+            } else if (e.target.id === 'decline-ride') {
+                this.driverDeclineRide();
+            }
+        });
     },
 
     confirmRide(taxiId) {
+        console.log('confirmRide called with taxiId:', taxiId);
         const pickup = document.getElementById('pickup-location').value;
         const dropoff = document.getElementById('dropoff-location').value;
+
+        console.log('Pickup:', pickup, 'Dropoff:', dropoff);
 
         if (!pickup || !dropoff) {
             alert('Proszę wypełnić miejsca odbioru i docelowe.');
             return;
         }
 
-        const taxi = TaxiModel.getTaxiById(taxiId);
+        if (!this.selectedRideType) {
+            alert('Proszę wybrać rodzaj przejazdu.');
+            return;
+        }
+
         const bookingData = {
             pickup,
             dropoff,
-            passengers: 1, // Default for now
-            taxiName: taxi.name
+            passengers: 1,
+            rideType: this.selectedRideType,
+            paymentMethod: 'card',
+            specialRequests: ''
         };
 
-        const booking = TaxiModel.bookTaxi(taxiId, bookingData);
+        console.log('Booking data:', bookingData);
+
+        const booking = Model.createDetailedBooking(taxiId, bookingData);
+        console.log('Booking result:', booking);
+
         if (booking) {
+            console.log('Showing ride tracking modal');
             TaxiView.showRideTracking(booking);
         } else {
             alert('Zamówienie nie powiodło się. Spróbuj ponownie.');
@@ -110,10 +137,12 @@ const TaxiController = {
             pickup,
             dropoff,
             passengers: 1,
-            taxiName: taxi.name
+            rideType: this.selectedRideType,
+            paymentMethod: 'card',
+            specialRequests: ''
         };
 
-        const booking = TaxiModel.bookTaxi(taxi.id, bookingData);
+        const booking = Model.createDetailedBooking(taxi.id, bookingData);
         if (booking) {
             TaxiView.showRideTracking(booking);
         } else {
@@ -126,13 +155,13 @@ const TaxiController = {
     },
 
     showBookingHistory() {
-        const bookings = TaxiModel.getBookings();
+        const bookings = Model.getBookings();
         TaxiView.renderBookingHistory(bookings);
         TaxiView.showModal('history-modal');
     },
 
     showNotifications() {
-        const notifications = TaxiModel.getNotifications();
+        const notifications = Model.getNotifications();
         TaxiView.renderNotifications(notifications);
         TaxiView.showModal('notifications-modal');
     },
@@ -141,7 +170,7 @@ const TaxiController = {
         const username = document.getElementById('username').value;
         const password = document.getElementById('password').value;
 
-        if (TaxiModel.loginUser(username, password)) {
+        if (Model.loginUser(username, password)) {
             alert('Zalogowano pomyślnie!');
             TaxiView.hideModal('login-modal');
         } else {
@@ -149,11 +178,13 @@ const TaxiController = {
         }
     },
 
-    showDiscounts() {
-        const discounts = TaxiModel.getAvailableDiscounts();
-        TaxiView.renderDiscounts(discounts);
-        TaxiView.showModal('discounts-modal');
+    showReviews() {
+        const reviews = Model.getReviews();
+        TaxiView.renderReviews(reviews);
+        TaxiView.showModal('reviews-modal');
     },
+
+
 
     selectRating(rating) {
         this.selectedRating = rating;
@@ -169,14 +200,70 @@ const TaxiController = {
 
     submitRating() {
         const comment = document.getElementById('rating-comment').value;
-        const currentRide = TaxiModel.getCurrentRide();
-        if (currentRide && this.selectedRating) {
-            TaxiModel.submitRating(currentRide.id, this.selectedRating, comment);
+        if (this.selectedRating) {
+            Model.submitRating(null, this.selectedRating, comment);
             alert('Dziękujemy za ocenę!');
             TaxiView.hideModal('rating-modal');
         } else {
             alert('Proszę wybrać ocenę.');
         }
+    },
+
+
+
+    driverAcceptRide() {
+        const messageElement = document.getElementById('driver-choice-message');
+        const acceptBtn = document.getElementById('accept-ride');
+        const declineBtn = document.getElementById('decline-ride');
+
+        // Disable buttons
+        acceptBtn.disabled = true;
+        declineBtn.disabled = true;
+        acceptBtn.style.opacity = '0.5';
+        declineBtn.style.opacity = '0.5';
+
+        // Show success message
+        messageElement.textContent = '✓ Kierowca zaakceptował przejazd! Rozpoczynamy podróż...';
+        messageElement.style.color = 'green';
+        messageElement.style.fontWeight = 'bold';
+
+        // Start ride tracking with 15 minutes estimated time
+        setTimeout(() => {
+            TaxiView.startRideTracking(15);
+        }, 2000);
+    },
+
+    driverDeclineRide() {
+        const messageElement = document.getElementById('driver-choice-message');
+        const acceptBtn = document.getElementById('accept-ride');
+        const declineBtn = document.getElementById('decline-ride');
+
+        // Disable buttons
+        acceptBtn.disabled = true;
+        declineBtn.disabled = true;
+        acceptBtn.style.opacity = '0.5';
+        declineBtn.style.opacity = '0.5';
+
+        // Show decline message
+        messageElement.textContent = '✗ Kierowca odrzucił przejazd. Szukamy innego kierowcy...';
+        messageElement.style.color = 'red';
+        messageElement.style.fontWeight = 'bold';
+
+        // Simulate finding another driver
+        setTimeout(() => {
+            messageElement.textContent = 'Szukam innego kierowcy...';
+            messageElement.style.color = 'orange';
+        }, 2000);
+
+        setTimeout(() => {
+            messageElement.textContent = '✓ Znaleziono innego kierowcę! Rozpoczynamy podróż...';
+            messageElement.style.color = 'green';
+
+            // Start ride tracking with 12 minutes estimated time
+            setTimeout(() => {
+                TaxiView.startRideTracking(12);
+            }, 2000);
+        }, 4000);
     }
 };
 

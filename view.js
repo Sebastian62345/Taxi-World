@@ -40,11 +40,14 @@ const TaxiView = {
                     <div class="driver-details">
                         <h3>${taxi.driver.name}</h3>
                         <div class="rating">⭐ ${taxi.driver.rating}</div>
+                        <div class="favorite-btn" data-driver-id="${taxi.id}" style="cursor: pointer; font-size: 20px;">
+                            ${taxi.driver.favorite ? '❤️' : '🤍'}
+                        </div>
                     </div>
                 </div>
                 <div class="taxi-body">
                     <div class="taxi-details">
-                        <span>${taxi.car.model} • ${taxi.car.color}</span>
+                        <span>${taxi.car.model} • ${taxi.car.color} (${taxi.car.year})</span>
                         <span>${taxi.car.plate}</span>
                     </div>
                     <div class="taxi-details">
@@ -55,8 +58,18 @@ const TaxiView = {
                         <span>💰 ${taxi.estimatedCost}</span>
                         <span>⭐ ${taxi.rating}</span>
                     </div>
+                    <div class="driver-info-extra">
+                        <div class="languages">🌐 ${taxi.driver.languages.join(', ')}</div>
+                        <div class="experience">💼 ${taxi.driver.experience} • ${taxi.driver.trips} przejazdów</div>
+                    </div>
+                    <div class="car-features">
+                        <h5>Wyposażenie:</h5>
+                        <div class="features-list">
+                            ${taxi.car.features.map(feature => `<span class="feature-tag">${feature}</span>`).join('')}
+                        </div>
+                    </div>
                     <div class="reviews">
-                        <h4>Opinie:</h4>
+                        <h4>Opinie (${taxi.reviews.length}):</h4>
                         ${taxi.reviews.slice(0, 2).map(review => `
                             <div class="review">
                                 <strong>${review.user}</strong> (⭐ ${review.rating}): ${review.comment}
@@ -70,6 +83,16 @@ const TaxiView = {
             `;
             this.taxiListElement.appendChild(taxiCard);
         });
+
+        // Add favorite button event listeners
+        document.querySelectorAll('.favorite-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const driverId = parseInt(btn.getAttribute('data-driver-id'));
+                const isFavorite = Model.toggleFavoriteDriver(driverId);
+                btn.textContent = isFavorite ? '❤️' : '🤍';
+            });
+        });
     },
 
     showModal(modalId) {
@@ -80,16 +103,27 @@ const TaxiView = {
         document.getElementById(modalId).style.display = 'none';
     },
 
-    showRideTracking(ride) {
+    showRideTracking(booking) {
         const rideDetailsElement = document.getElementById('ride-details');
         rideDetailsElement.innerHTML = `
             <div class="ride-info">
                 <h3>Twój przejazd</h3>
-                <p><strong>Kierowca:</strong> ${ride.driver.name}</p>
-                <p><strong>Auto:</strong> ${ride.car.model} (${ride.car.plate})</p>
-                <p><strong>Skąd:</strong> ${ride.pickup}</p>
-                <p><strong>Dokąd:</strong> ${ride.dropoff}</p>
-                <p><strong>Cena:</strong> ${TaxiModel.getTaxiById(ride.taxiId).price} zł</p>
+                <p><strong>Kierowca:</strong> ${booking.taxi.driver.name}</p>
+                <p><strong>Auto:</strong> ${booking.taxi.car.model} (${booking.taxi.car.plate})</p>
+                <p><strong>Skąd:</strong> ${booking.pickup}</p>
+                <p><strong>Dokąd:</strong> ${booking.dropoff}</p>
+                <p><strong>Cena:</strong> ${booking.price} zł</p>
+                <p><strong>Data:</strong> ${booking.date} ${booking.time}</p>
+                <p><strong>Szacowany czas:</strong> ${booking.priceDetails.estimatedTime} min</p>
+                <p><strong>Dystans:</strong> ${booking.priceDetails.distance} km</p>
+            </div>
+            <div class="driver-selection">
+                <h4>Kierowca chce wybrać przejazd</h4>
+                <div class="driver-choice">
+                    <button id="accept-ride" class="driver-accept-btn" style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 10px; font-size: 16px;">✓ Akceptuję przejazd</button>
+                    <button id="decline-ride" class="driver-decline-btn" style="background: #dc3545; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px;">✗ Odrzucam przejazd</button>
+                </div>
+                <div id="driver-choice-message" style="margin-top: 15px; font-weight: bold;"></div>
             </div>
             <div class="payment-methods">
                 <h4>Wybierz metodę płatności</h4>
@@ -108,12 +142,19 @@ const TaxiView = {
         });
 
         this.showModal('ride-modal');
-        this.startRideTracking();
+        this.startRideTracking(booking.priceDetails.estimatedTime);
     },
 
-    startRideTracking() {
+    startRideTracking(estimatedTime) {
         const statuses = ['Szukam kierowcy...', 'Kierowca w drodze...', 'Kierowca dotarł', 'Podróż w trakcie...', 'Dotarłeś na miejsce!'];
         let statusIndex = 0;
+
+        // Calculate interval based on estimated time (longer distance = longer intervals)
+        const baseInterval = 2000; // 2 seconds base
+        const timeMultiplier = Math.max(1, estimatedTime / 10); // Scale with distance
+        const intervalTime = baseInterval * timeMultiplier;
+
+        console.log(`Estimated time: ${estimatedTime} min, Interval: ${intervalTime} ms`);
 
         const interval = setInterval(() => {
             if (statusIndex < statuses.length) {
@@ -127,7 +168,7 @@ const TaxiView = {
                     TaxiView.showRatingModal();
                 }, 2000);
             }
-        }, 3000);
+        }, intervalTime);
     },
 
     renderBookingHistory(bookings) {
@@ -135,12 +176,14 @@ const TaxiView = {
         historyElement.innerHTML = bookings.length > 0 ?
             bookings.map(booking => `
                 <div class="booking-item">
-                    <p><strong>Data:</strong> ${booking.date}</p>
-                    <p><strong>Kierowca:</strong> ${booking.driver.name}</p>
-                    <p><strong>Auto:</strong> ${booking.car.model}</p>
+                    <p><strong>Data:</strong> ${booking.date} ${booking.time || ''}</p>
+                    <p><strong>Kierowca:</strong> ${booking.taxi.driver.name}</p>
+                    <p><strong>Auto:</strong> ${booking.taxi.car.model} (${booking.taxi.car.plate})</p>
                     <p><strong>Skąd:</strong> ${booking.pickup}</p>
                     <p><strong>Dokąd:</strong> ${booking.dropoff}</p>
+                    <p><strong>Cena:</strong> ${booking.price} zł</p>
                     <p><strong>Status:</strong> ${booking.status}</p>
+                    ${booking.priceDetails ? `<p><strong>Dystans:</strong> ${booking.priceDetails.distance} km</p>` : ''}
                 </div>
             `).join('') : '<p>Brak historii przejazdów.</p>';
     },
@@ -155,18 +198,52 @@ const TaxiView = {
         `).join('');
     },
 
-    renderDiscounts(discounts) {
-        const discountsElement = document.getElementById('discounts-list');
-        discountsElement.innerHTML = discounts.length > 0 ?
-            discounts.map(discount => `
-                <div class="discount-item">
-                    <div class="discount-code">${discount.code}</div>
-                    <div class="discount-description">${discount.description}</div>
+    renderReviews(reviews) {
+        const reviewsElement = document.getElementById('reviews-list');
+        reviewsElement.innerHTML = reviews.length > 0 ?
+            reviews.map(review => `
+                <div class="review">
+                    <strong>${review.user}</strong> (${review.date}): ⭐ ${review.rating}
+                    ${review.text ? `<br><em>${review.text}</em>` : ''}
                 </div>
-            `).join('') : '<p>Brak dostępnych zniżek.</p>';
+            `).join('') : '<p>Brak opinii.</p>';
     },
+
+
 
     showRatingModal() {
         this.showModal('rating-modal');
+    },
+
+    updateOrderStatus(order) {
+        const statusElement = document.getElementById('tracking-status');
+        if (statusElement) {
+            let statusText = 'Szukam kierowcy...';
+            switch (order.status) {
+                case 'searching':
+                    statusText = 'Szukam kierowcy...';
+                    break;
+                case 'assigned':
+                    statusText = `Kierowca ${order.driver.name} w drodze!`;
+                    break;
+                case 'on_way':
+                    statusText = 'Kierowca w drodze...';
+                    break;
+                case 'arrived':
+                    statusText = 'Kierowca dotarł!';
+                    break;
+                case 'completed':
+                    statusText = 'Podróż zakończona!';
+                    break;
+            }
+            statusElement.textContent = statusText;
+        }
+    },
+
+    updateProgressBar(progress) {
+        const progressElement = document.getElementById('progress-fill');
+        if (progressElement) {
+            progressElement.style.width = progress + '%';
+        }
     }
 };
